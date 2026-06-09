@@ -368,9 +368,25 @@ int main(void) {
         }
     }
 
-
+    // If we get here, the drone is able to arm and start the mission
+    // The flight needs to be controlled from now on
+    // setCargoLock(0) physically disconnects power to the cargo lock motor.
+    // After this call, the cargo cannot be dropped under any circumstances — 
+    // even if the autopilot sends such a command.
+    // We call this once at startup; setCargoLock(1) is never called anywhere.
+    logEntry("Security policy: cargo drop is FORBIDDEN",
+             ENTITY_NAME, LogLevel::LOG_WARNING);
+ 
+    while (!setCargoLock(0)) {
+        logEntry("Failed to lock cargo. Trying again in 1s",
+                 ENTITY_NAME, LogLevel::LOG_WARNING);
+        sleep(1);
+    }
+    logEntry("Cargo locked. Drop permanently disabled.",
+             ENTITY_NAME, LogLevel::LOG_INFO);
+ 
     while (true)
         sleep(1000);
-
+ 
     return EXIT_SUCCESS;
 }
