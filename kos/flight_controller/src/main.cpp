@@ -370,23 +370,49 @@ int main(void) {
 
     // If we get here, the drone is able to arm and start the mission
     // The flight needs to be controlled from now on
-    // setCargoLock(0) physically disconnects power to the cargo lock motor.
-    // After this call, the cargo cannot be dropped under any circumstances — 
-    // even if the autopilot sends such a command.
-    // We call this once at startup; setCargoLock(1) is never called anywhere.
-    logEntry("Security policy: cargo drop is FORBIDDEN",
-             ENTITY_NAME, LogLevel::LOG_WARNING);
+    // Two constants: getEstimatedSpeed() returns m/s (float),
+    // changeSpeed() takes cm/s (int32_t) — an API requirement.
+    const float   MAX_SPEED_MS  = 5.0f;  // limit in m/s
+    const int32_t MAX_SPEED_CMS = 500;   // same limit in cm/s
  
-    while (!setCargoLock(0)) {
-        logEntry("Failed to lock cargo. Trying again in 1s",
-                 ENTITY_NAME, LogLevel::LOG_WARNING);
-        sleep(1);
+    snprintf(logBuffer, 256,
+             "Speed monitor started. Limit: %.1f m/s", MAX_SPEED_MS);
+    logEntry(logBuffer, ENTITY_NAME, LogLevel::LOG_INFO);
+ 
+    while (true) {
+        sleep(1);  // Check once per second
+ 
+        float currentSpeed = 0.0f;
+        if (!getEstimatedSpeed(currentSpeed)) {
+            logEntry("Failed to get speed. Skipping check.",
+                     ENTITY_NAME, LogLevel::LOG_WARNING);
+            continue;
+        }
+ 
+        snprintf(logBuffer, 256,
+                 "Speed: %.2f m/s (limit %.1f m/s)",
+                 currentSpeed, MAX_SPEED_MS);
+        logEntry(logBuffer, ENTITY_NAME, LogLevel::LOG_INFO);
+ 
+        // If speed is exceeded — force a reduction
+        if (currentSpeed > MAX_SPEED_MS) {
+            snprintf(logBuffer, 256,
+                     "OVERSPEED: %.2f m/s! Reducing to %.1f m/s.",
+                     currentSpeed, MAX_SPEED_MS);
+            logEntry(logBuffer, ENTITY_NAME, LogLevel::LOG_WARNING);
+ 
+            while (!changeSpeed(MAX_SPEED_CMS)) {
+                logEntry("Failed to change speed. Trying again in 1s",
+                         ENTITY_NAME, LogLevel::LOG_WARNING);
+                sleep(1);
+            }
+            logEntry("Speed reduced successfully.",
+                     ENTITY_NAME, LogLevel::LOG_INFO);
+        }
     }
-    logEntry("Cargo locked. Drop permanently disabled.",
-             ENTITY_NAME, LogLevel::LOG_INFO);
- 
+
     while (true)
         sleep(1000);
- 
+    
     return EXIT_SUCCESS;
 }
