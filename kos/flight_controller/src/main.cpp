@@ -318,6 +318,57 @@ int main(void) {
     //If we get here, the drone is able to arm and start the mission
     //The flight is need to be controlled from now on
 
+    int32_t startLat = 0, startLon = 0, startAlt = 0;
+    while (!getCoords(startLat, startLon, startAlt)) {
+        logEntry("Failed to get start coordinates. Trying again in 1s",
+                 ENTITY_NAME, LogLevel::LOG_WARNING);
+        sleep(1);
+    }
+    snprintf(logBuffer, 256,
+             "Corridor monitor started. Start: lat=%d lon=%d. Limit: 10 m",
+             startLat, startLon);
+    logEntry(logBuffer, ENTITY_NAME, LogLevel::LOG_INFO);
+ 
+    // Main checking cycle
+    while (true) {
+        sleep(1);
+ 
+        int32_t curLat = 0, curLon = 0, curAlt = 0;
+        if (!getCoords(curLat, curLon, curAlt)) {
+            logEntry("Failed to get coordinates. Skipping check.",
+                     ENTITY_NAME, LogLevel::LOG_WARNING);
+            continue;
+        }
+ 
+        // Distance from start point in meters
+        double dlatM = (double)(curLat - startLat) / 1e7 * 111320.0;
+        double dlonM = (double)(curLon - startLon) / 1e7 * 111320.0
+                       * cos((double)startLat / 1e7 * M_PI / 180.0);
+        double dist  = sqrt(dlatM * dlatM + dlonM * dlonM);
+ 
+        snprintf(logBuffer, 256,
+                 "Corridor check: dist=%.1f m (limit=10 m)", dist);
+        logEntry(logBuffer, ENTITY_NAME, LogLevel::LOG_INFO);
+ 
+        // If more than 10 meters - park drone
+        if (dist > 10.0) {
+            snprintf(logBuffer, 256,
+                     "WARNING: out of corridor! dist=%.1f m. Landing.",
+                     dist);
+            logEntry(logBuffer, ENTITY_NAME, LogLevel::LOG_WARNING);
+ 
+            while (!pauseFlight()) {
+                logEntry("Failed to pause flight. Trying again in 1s",
+                         ENTITY_NAME, LogLevel::LOG_WARNING);
+                sleep(1);
+            }
+            logEntry("Emergency landing initiated.",
+                     ENTITY_NAME, LogLevel::LOG_INFO);
+            break;
+        }
+    }
+
+
     while (true)
         sleep(1000);
 
